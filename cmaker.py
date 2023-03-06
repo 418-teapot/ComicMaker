@@ -4,6 +4,7 @@ import tomli
 from PIL import Image
 from xml.dom.minidom import Document
 
+# generate content.opf
 class XMLMaker(object):
     def __init__(self, dict: dict[str, str], width: int, height: int):
         self.title = dict["title"]
@@ -94,6 +95,12 @@ class XMLMaker(object):
         with open("./content.opf", 'w', encoding="utf-8") as f:
             self.doc.writexml(f, newl="\n", addindent="\t", encoding="utf-8")
 
+# generate pages html and toc.ncx
+class HTMLMaker(object):
+    def __init__(self, width: int, height: int):
+        self.width = width
+        self.height = height
+
 def getCoverName() -> str:
     assert os.path.exists("./cover.jpg") or os.path.exists("./cover.png")
     if os.path.exists("./cover.jpg"):
@@ -121,5 +128,6 @@ def rename(dir: str, width: int, height: int) -> None :
 if __name__ == "__main__":
     with open("./config.toml", 'rb') as config:
         info = tomli.load(config)
-        w, h = getImgWH()
-        XMLMaker(info, w, h).generate()
+    assert info is not None
+    w, h = getImgWH()
+    XMLMaker(info, w, h).generate()
