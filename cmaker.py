@@ -1,16 +1,16 @@
-#! /home/cambricon/code/Python-3.11.2/build/bin/python3
 # -*- coding: UTF-8 -*-
 
 import os
 import uuid
 import tomli
 import re
+from glob import glob
 from PIL import Image
 from xml.dom.minidom import Document
 
 # generate content.opf
 class XMLMaker(object):
-    def __init__(self, dict: dict[str, str], width: int, height: int):
+    def __init__(self, dict: dict[str, str], chapter: dict[str, str], width: int, height: int):
         self.title = dict["title"]
         self.language = dict["language"]
         self.author = dict["author"]
@@ -20,6 +20,7 @@ class XMLMaker(object):
             case _:
                 self.publisher = dict["publisher"]
         self.uuid = str(uuid.uuid4())
+        self.chapter = chapter
         self.width = width
         self.height = height
         self.metadata = None
@@ -65,15 +66,39 @@ class XMLMaker(object):
         item.setAttribute("id", id)
         item.setAttribute("media_type", media_type)
         self.manifest.appendChild(item)
+
+    def generateItemRef(self, idref: str):
+        itemref = self.doc.createElement("itemref")
+        itemref.setAttribute("idref", idref)
+        itemref.setAttribute("linear", "yes")
+        self.spine.appendChild(itemref)
     
-    def generateManifest(self):
+    def generateManifestAndSpine(self):
         assert self.manifest is not None
         self.generateItem("toc.ncx", "ncx", "application/x-dtbncx+xml")
         self.generateItem(getCoverName(), "cover-image", "image/{}".format(getCoverName()[-3:]))
-    
-    def generateSpine(self):
         assert self.spine is not None
         self.spine.setAttribute("toc", "ncx")
+        if "preface" in self.chapter.keys():
+            prefaces = glob("html/preface*.html")
+            prefaces.sort(key=lambda x:int(x.split('-')[1].split('.')[0]))
+            for preface in prefaces:
+                self.generateItem(preface, "item-{}".format(preface[5:-5]), "application/xhtml+xmlapplication/xhtml+xml")
+                self.generateItemRef("item-{}".format(preface[5:-5]))
+        cnt: int = 1
+        while str(cnt) in self.chapter.keys():
+            chapter_cnt = glob("html/{}-*.html".format(str(cnt)))
+            chapter_cnt.sort(key=lambda x:int(x.split('-')[1].split('.')[0]))
+            for page in chapter_cnt:
+                self.generateItem(page, "item-{}".format(page[5:-5]), "application/xhtml+xml")
+                self.generateItemRef("item-{}".format(page[5:-5]))
+            cnt += 1
+        if "postscript" in self.chapter.keys():
+            postscripts = glob("html/postscript*.html")
+            postscripts.sort(key=lambda x:int(x.split('-')[1].split('.')[0]))
+            for postscript in postscripts:
+                self.generateItem(postscript, "item-{}".format(postscript[5:-5]), "application/xhtml+xmlapplication/xhtml+xml")
+                self.generateItemRef("item-{}".format(postscript[5:-5]))
 
     def generate(self):
         self.doc = Document()
@@ -88,11 +113,9 @@ class XMLMaker(object):
         self.package.appendChild(self.metadata)
 
         self.manifest = self.doc.createElement("manifest")
-        self.generateManifest()
-        self.package.appendChild(self.manifest)
-
         self.spine = self.doc.createElement("spine")
-        self.generateSpine()
+        self.generateManifestAndSpine()
+        self.package.appendChild(self.manifest)
         self.package.appendChild(self.spine)
 
         self.doc.appendChild(self.package)
@@ -130,9 +153,11 @@ class HTMLMaker(object):
         assert os.path.exists("./html/images")
         for dir in os.listdir("./html/images"):
             if dir == "前言":
-                self.chapter[dir] = "preface"
+                self.chapter["preface"] = "前言"
+                os.rename("./html/images/前言", "./html/images/preface")
             elif dir == "后记":
-                self.chapter[dir] = "postsctipt"
+                self.chapter["postscript"] = "后记"
+                os.rename("./html/images/后记", "./html/images/postscript")
             else:
                 chapter_num = re.match("第\d+话", dir).group()
                 assert chapter_num is not None
@@ -140,13 +165,17 @@ class HTMLMaker(object):
                 assert num is not None
                 # chapter_name = re.split("第\d+话", dir)[1]
                 # assert chapter_name is not None
-                self.chapter[dir] = str(int(num))
+                self.chapter[str(int(num))] = dir
+                os.rename(os.path.join("./html/images", dir), os.path.join("./html/images", num))
 
     def generateHTML(self, title: str, src: str):
         doc = Document()
         html = doc.createElement("html");
 
         head = doc.createElement("head")
+        meta_node = doc.createElement("meta")
+        meta_node.setAttribute("charset", "UTF-8")
+        head .appendChild(meta_node)
         title_node = doc.createElement("title")
         title_node.appendChild(doc.createTextNode(title))
         head.appendChild(title_node)
@@ -165,7 +194,7 @@ class HTMLMaker(object):
 
         doc.appendChild(html)
 
-        html_file = "{}-{}.html".format(self.chapter[title], src[:-4])
+        html_file = "{}-{}.html".format(title, src[:-4])
         with open(os.path.join("./html", html_file), 'w', encoding='utf-8') as f:
             f.write(f'<!DOCTYPE html>\n')
             for node in doc.childNodes:
@@ -207,16 +236,15 @@ class HTMLMaker(object):
     def generateNavPoints(self, doc, nav_map):
         cnt: int = 1
         bias = 0
-        if "前言" in self.chapter.keys():
+        if "preface" in self.chapter.keys():
             self.generateNavPoint(doc, nav_map, cnt, "前言", "html/preface-001.html")
             bias = 1
 
-        while str(cnt) in self.chapter.values():
-            text = [k for k, v in self.chapter.items() if v == str(cnt)][0]
-            self.generateNavPoint(doc, nav_map, cnt + bias, text, "html/{}-001.html".format(cnt))
+        while str(cnt) in self.chapter.keys():
+            self.generateNavPoint(doc, nav_map, cnt + bias, self.chapter[str(cnt)], "html/{}-001.html".format(cnt))
             cnt += 1
 
-        if "后记" in self.chapter.keys():
+        if "postscript" in self.chapter.keys():
             self.generateNavPoint(doc, nav_map, cnt + bias, "后记", "html/postscript-001.html")
 
     def generateTOC(self):
@@ -260,11 +288,12 @@ class HTMLMaker(object):
             if os.path.isdir(item) and item != ".git" and item != "html":
                 self.rename(item)
 
-    def generate(self):
-        # self.tidy()
-        # self.generatePages()
+    def generate(self) -> dict:
+        self.tidy()
         self.generateChapter()
+        self.generatePages()
         self.generateTOC()
+        return self.chapter
 
 def getCoverName() -> str:
     assert os.path.exists("./cover.jpg") or os.path.exists("./cover.png")
@@ -282,5 +311,5 @@ if __name__ == "__main__":
         info = tomli.load(config)
     assert info is not None
     w, h = getImgWH()
-    HTMLMaker(info, w, h).generate()
-    XMLMaker(info, w, h).generate()
+    chapter = HTMLMaker(info, w, h).generate()
+    XMLMaker(info, chapter, w, h).generate()
