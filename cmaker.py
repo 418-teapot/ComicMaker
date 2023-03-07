@@ -1,6 +1,9 @@
+# -*- coding: UTF-8 -*-
+
 import os
 import uuid
 import tomli
+import re
 from PIL import Image
 from xml.dom.minidom import Document
 
@@ -100,6 +103,93 @@ class HTMLMaker(object):
     def __init__(self, width: int, height: int):
         self.width = width
         self.height = height
+        self.chapter: dict[str, str] = {}
+
+    def rename(self, dir: str) -> None :
+        cnt: int = 1
+        dirs = os.listdir(dir)
+        dirs.sort(key=lambda x:int(x.split('.')[0]))
+        for img in dirs:
+            assert img.endswith("jpg") or img.endswith("png")
+            old_name: str = os.path.join(dir, img)
+
+            w, h = Image.open(old_name).size
+            assert w == self.width and h == self.height
+
+            new_img: str = "{:0>3d}.{}".format(cnt, img[-3:])
+            new_name: str = os.path.join(dir, new_img)
+            os.rename(old_name, new_name)
+
+            cnt += 1
+        assert os.path.exists("./html/images")
+        os.rename(dir, os.path.join("./html/images", dir))
+
+    def generateChapter(self, dir):
+        if dir == "前言":
+            self.chapter[dir] = "preface"
+        elif dir == "后记":
+            self.chapter[dir] = "postsctipt"
+        else:
+            chapter_num = re.match("第\d+话", dir).group()
+            assert chapter_num is not None
+            num = re.search("\d+", chapter_num).group()
+            assert num is not None
+            # chapter_name = re.split("第\d+话", dir)[1]
+            # assert chapter_name is not None
+            self.chapter[dir] = num
+
+    def generateHTML(self, title: str, src: str):
+        doc = Document()
+        html = doc.createElement("html");
+
+        head = doc.createElement("head")
+        title_node = doc.createElement("title")
+        title_node.appendChild(doc.createTextNode(title))
+        head.appendChild(title_node)
+        html.appendChild(head)
+
+        body = doc.createElement("body")
+        div = doc.createElement("div")
+        img = doc.createElement("img")
+        img.setAttribute("style", "width:{}px;height:{}px;margin-left:0px;margin-top:0px;margin-right:0px;margin-bottom:0px;".format(self.width, self.height))
+        title_path = os.path.join("images", title)
+        img_path = os.path.join(title_path, src)
+        img.setAttribute("src", img_path)
+        div.appendChild(img)
+        body.appendChild(div)
+        html.appendChild(body)
+
+        doc.appendChild(html)
+
+        html_file = "{}-{}.html".format(self.chapter[title], src[:-4])
+        with open(os.path.join("./html", html_file), 'w', encoding='utf-8') as f:
+            f.write(f'<!DOCTYPE html>\n')
+            for node in doc.childNodes:
+                node.writexml(f, indent="", addindent="\t", newl="\n")
+
+
+    def generatePages(self):
+        assert os.path.exists("./html/images")
+        for chapter in os.listdir("./html/images"):
+            chapter_path = os.path.join("./html/images", chapter)
+            if os.path.isdir(chapter_path):
+                for page in os.listdir(chapter_path):
+                    self.generateHTML(chapter, page)
+
+    def generateTOC(self):
+        pass
+
+    def tidy(self):
+        assert not os.path.exists("./html/images")
+        os.makedirs("./html/images")
+        for item in os.listdir("./"):
+            if os.path.isdir(item) and item != ".git" and item != "html":
+                self.generateChapter(item)
+                self.rename(item)
+
+    def generate(self):
+        self.tidy()
+        self.generatePages()
 
 def getCoverName() -> str:
     assert os.path.exists("./cover.jpg") or os.path.exists("./cover.png")
@@ -112,22 +202,10 @@ def getImgWH() -> tuple[int, int]:
     w, h = Image.open(getCoverName()).size
     return (w, h)
 
-def rename(dir: str, width: int, height: int) -> None :
-    cnt: int = 1
-    for img in os.listdir(dir):
-        assert img.endswith("jpg") or img.endswith("png")
-        old_name: str = os.path.join(dir, img)
-
-        w, h = Image.open(old_name).size
-        assert w == width and h == height
-
-        new_img: str = "{:0>3d}.{}".format(cnt, img[-3:])
-        new_name: str = os.path.join(dir, new_img)
-        os.rename(old_name, new_name)
-
 if __name__ == "__main__":
     with open("./config.toml", 'rb') as config:
         info = tomli.load(config)
     assert info is not None
     w, h = getImgWH()
+    HTMLMaker(w, h).generate()
     XMLMaker(info, w, h).generate()
