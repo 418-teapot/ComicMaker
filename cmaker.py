@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 
 import os
+import shutil
 import uuid
 import tomli
 import re
@@ -10,15 +11,15 @@ from xml.dom.minidom import Document
 
 # generate content.opf
 class XMLMaker(object):
-    def __init__(self, dict: dict[str, str], chapter: dict[str, str], width: int, height: int):
-        self.title = dict["title"]
-        self.language = dict["language"]
-        self.author = dict["author"]
-        match dict["publisher"]:
+    def __init__(self, info: dict[str, str], chapter: dict[str, str], width: int, height: int):
+        self.title = info["title"]
+        self.language = info["language"]
+        self.author = info["author"]
+        match info["publisher"]:
             case "null":
                 self.publisher = None
             case _:
-                self.publisher = dict["publisher"]
+                self.publisher = info["publisher"]
         self.uuid = str(uuid.uuid4())
         self.chapter = chapter
         self.width = width
@@ -146,6 +147,7 @@ class HTMLMaker(object):
             os.rename(old_name, new_name)
 
             cnt += 1
+        shutil.copytree(dir, os.path.join("./backup", dir))
         assert os.path.exists("./html/images")
         os.rename(dir, os.path.join("./html/images", dir))
 
@@ -285,7 +287,7 @@ class HTMLMaker(object):
         assert not os.path.exists("./html/images")
         os.makedirs("./html/images")
         for item in os.listdir("./"):
-            if os.path.isdir(item) and item != ".git" and item != "html":
+            if os.path.isdir(item) and item != ".git" and item != "html" and item != "backup":
                 self.rename(item)
 
     def generate(self) -> dict:
@@ -313,3 +315,4 @@ if __name__ == "__main__":
     w, h = getImgWH()
     chapter = HTMLMaker(info, w, h).generate()
     XMLMaker(info, chapter, w, h).generate()
+    os.system("kindlegen -c2 -dont_append_source -verbose content.opf")
