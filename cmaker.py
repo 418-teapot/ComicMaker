@@ -1,3 +1,4 @@
+#! /home/cambricon/code/Python-3.11.2/build/bin/python3
 # -*- coding: UTF-8 -*-
 
 import os
@@ -100,7 +101,8 @@ class XMLMaker(object):
 
 # generate pages html and toc.ncx
 class HTMLMaker(object):
-    def __init__(self, width: int, height: int):
+    def __init__(self, info: dict, width: int, height: int):
+        self.title = info["title"]
         self.width = width
         self.height = height
         self.chapter: dict[str, str] = {}
@@ -124,19 +126,21 @@ class HTMLMaker(object):
         assert os.path.exists("./html/images")
         os.rename(dir, os.path.join("./html/images", dir))
 
-    def generateChapter(self, dir):
-        if dir == "前言":
-            self.chapter[dir] = "preface"
-        elif dir == "后记":
-            self.chapter[dir] = "postsctipt"
-        else:
-            chapter_num = re.match("第\d+话", dir).group()
-            assert chapter_num is not None
-            num = re.search("\d+", chapter_num).group()
-            assert num is not None
-            # chapter_name = re.split("第\d+话", dir)[1]
-            # assert chapter_name is not None
-            self.chapter[dir] = num
+    def generateChapter(self):
+        assert os.path.exists("./html/images")
+        for dir in os.listdir("./html/images"):
+            if dir == "前言":
+                self.chapter[dir] = "preface"
+            elif dir == "后记":
+                self.chapter[dir] = "postsctipt"
+            else:
+                chapter_num = re.match("第\d+话", dir).group()
+                assert chapter_num is not None
+                num = re.search("\d+", chapter_num).group()
+                assert num is not None
+                # chapter_name = re.split("第\d+话", dir)[1]
+                # assert chapter_name is not None
+                self.chapter[dir] = str(int(num))
 
     def generateHTML(self, title: str, src: str):
         doc = Document()
@@ -176,20 +180,91 @@ class HTMLMaker(object):
                 for page in os.listdir(chapter_path):
                     self.generateHTML(chapter, page)
 
+    def generateMeta(self, doc, head, content: str, name: str):
+        assert head is not None
+        meta = doc.createElement("meta")
+        meta.setAttribute("content", content)
+        meta.setAttribute("name", name)
+        head.appendChild(meta)
+
+    def generateNavPoint(self, doc, nav_map, cnt: int, text: str, src: str):
+        nav_point = doc.createElement("navPoint")
+        nav_point.setAttribute("playOrder", str(cnt))
+        nav_point.setAttribute("id", "toc-{}".format(cnt))
+
+        nav_label = doc.createElement("navLabel")
+        text_node = doc.createElement("text")
+        text_node.appendChild(doc.createTextNode(text))
+        nav_label.appendChild(text_node)
+        nav_point.appendChild(nav_label)
+
+        content = doc.createElement("content")
+        content.setAttribute("src", src)
+        nav_point.appendChild(content)
+
+        nav_map.appendChild(nav_point)
+
+    def generateNavPoints(self, doc, nav_map):
+        cnt: int = 1
+        bias = 0
+        if "前言" in self.chapter.keys():
+            self.generateNavPoint(doc, nav_map, cnt, "前言", "html/preface-001.html")
+            bias = 1
+
+        while str(cnt) in self.chapter.values():
+            text = [k for k, v in self.chapter.items() if v == str(cnt)][0]
+            self.generateNavPoint(doc, nav_map, cnt + bias, text, "html/{}-001.html".format(cnt))
+            cnt += 1
+
+        if "后记" in self.chapter.keys():
+            self.generateNavPoint(doc, nav_map, cnt + bias, "后记", "html/postscript-001.html")
+
     def generateTOC(self):
-        pass
+        doc = Document()
+
+        ncx = doc.createElement("ncx")
+        ncx.setAttribute("version", "2005-1")
+        ncx.setAttribute("xmlns", "http://www.daisy.org/z3986/2005/ncx/")
+        ncx.setAttribute("xml:lang", "en-US")
+
+        head = doc.createElement("head")
+        self.generateMeta(doc, head, "", "dtb:uid")
+        self.generateMeta(doc, head, "", "dtb:depth")
+        self.generateMeta(doc, head, "0", "dtb:totalPageCount")
+        self.generateMeta(doc, head, "0", "dtb:maxPageNumber")
+        self.generateMeta(doc, head, "true", "generated")
+        ncx.appendChild(head)
+
+        doc_title = doc.createElement("docTitle")
+        title_text = doc.createElement("text")
+        title_text.appendChild(doc.createTextNode(self.title))
+        doc_title.appendChild(title_text)
+        ncx.appendChild(doc_title)
+
+        nav_map = doc.createElement("navMap")
+        self.generateNavPoints(doc, nav_map)
+        ncx.appendChild(nav_map)
+
+        doc.appendChild(ncx)
+
+        with open("./toc.ncx", "w", encoding="utf-8") as f:
+            f.write(f"<?xml version='1.0' encoding='UTF-8'?>\n")
+            f.write(f"<!DOCTYPE ncx PUBLIC '-//NISO//DTD ncx 2005-1//EN' 'http://www.daisy.org/z3986/2005/ncx-2005-1.dtd'>\n")
+            for node in doc.childNodes:
+                node.writexml(f, indent="", addindent="\t", newl="\n")
 
     def tidy(self):
         assert not os.path.exists("./html/images")
         os.makedirs("./html/images")
         for item in os.listdir("./"):
             if os.path.isdir(item) and item != ".git" and item != "html":
-                self.generateChapter(item)
                 self.rename(item)
 
     def generate(self):
-        self.tidy()
-        self.generatePages()
+        # self.tidy()
+        # self.generatePages()
+        self.generateChapter()
+        self.generateTOC()
 
 def getCoverName() -> str:
     assert os.path.exists("./cover.jpg") or os.path.exists("./cover.png")
@@ -207,5 +282,5 @@ if __name__ == "__main__":
         info = tomli.load(config)
     assert info is not None
     w, h = getImgWH()
-    HTMLMaker(w, h).generate()
+    HTMLMaker(info, w, h).generate()
     XMLMaker(info, w, h).generate()
