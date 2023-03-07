@@ -57,7 +57,7 @@ class XMLMaker(object):
 
         self.generateMeta("portrait", "orientation-lock")
         self.generateMeta("horizontal-rl", "primary-writting-mode")
-        self.generateMeta("{}x{}".format(self.width, self.height), "original-resolution")
+        # self.generateMeta("{}x{}".format(self.width, self.height), "original-resolution")
         self.generateMeta("false", "region-mag")
         self.generateMeta("cover-image", "cover")
 
@@ -139,8 +139,8 @@ class HTMLMaker(object):
             assert img.endswith("jpg") or img.endswith("png")
             old_name: str = os.path.join(dir, img)
 
-            w, h = Image.open(old_name).size
-            assert w == self.width and h == self.height
+            # w, h = Image.open(old_name).size
+            # assert w == self.width and h == self.height
 
             new_img: str = "{:0>3d}.{}".format(cnt, img[-3:])
             new_name: str = os.path.join(dir, new_img)
@@ -186,7 +186,7 @@ class HTMLMaker(object):
         body = doc.createElement("body")
         div = doc.createElement("div")
         img = doc.createElement("img")
-        img.setAttribute("style", "width:{}px;height:{}px;margin-left:0px;margin-top:0px;margin-right:0px;margin-bottom:0px;".format(self.width, self.height))
+        # img.setAttribute("style", "width:{}px;height:{}px;margin-left:0px;margin-top:0px;margin-right:0px;margin-bottom:0px;".format(self.width, self.height))
         title_path = os.path.join("images", title)
         img_path = os.path.join(title_path, src)
         img.setAttribute("src", img_path)
