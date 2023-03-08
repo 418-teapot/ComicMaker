@@ -1,11 +1,12 @@
 # -*- coding: UTF-8 -*-
 
 import os
-import shutil
 import uuid
 import tomli
+import tomli_w
 import re
 from glob import glob
+from functools import wraps
 from PIL import Image
 from xml.dom.minidom import Document
 
@@ -147,7 +148,6 @@ class HTMLMaker(object):
             os.rename(old_name, new_name)
 
             cnt += 1
-        shutil.copytree(dir, os.path.join("./backup", dir))
         assert os.path.exists("./html/images")
         os.rename(dir, os.path.join("./html/images", dir))
 
@@ -304,15 +304,75 @@ def getCoverName() -> str:
     else:
         return "cover.png"
 
-def getImgWH() -> tuple[int, int]:
-    w, h = Image.open(getCoverName()).size
-    return (w, h)
+class generate(object):
+    def __init__(self, doc):
+        self.doc = doc
+
+    def __call__(self, func):
+        @wraps
+        def decorator(*args, **kwargs):
+            return func(*args, **kwargs)
+        return decorator
+
+def get_cover_name() -> str:
+    pattern = re.compile(r'cover\w*\.(jpg|png)')
+    for item in os.listdir("./"):
+        if pattern.search(item) is not None:
+            return item
+
+def format_files() -> None:
+    if not os.path.exists("./html/images"):
+        os.makedirs("./html/images")
+
+    if os.path.exists("./info.toml"):
+        with open("./info.toml", 'rb') as f:
+            info = tomli.load(f)
+    else:
+        info = { "info": [] }
+
+    for dir in os.listdir("./"):
+        if os.path.isdir(dir) and dir != "html":
+            info["info"].append(format_chapter(dir))
+
+    with open("./info.toml", 'wb') as f:
+        tomli_w.dump(info, f)
+
+def format_chapter(dir: str) -> dict:
+    info = {}
+    name: str = ""
+    if dir == "前言":
+        name = "preface"
+    elif dir == "后记":
+        name = "postscript"
+    else:
+        chapter_num = re.match("第\d+话", dir).group()
+        assert chapter_num is not None
+        num = re.search("\d+", chapter_num).group()
+        assert num is not None
+        name = str(int(num))
+
+    images = os.listdir(dir)
+    pattern = re.compile(r'\d+\.(jpg|png)')
+    images.sort(key = lambda x : int(pattern.search(x).group().split(".")[0]))
+    cnt: int = 1
+    for image in images:
+        old_name = os.path.join(dir, image)
+        new_name = os.path.join(dir, "{:0>3d}.{}".format(cnt, image[-3:]))
+        w, h = Image.open(old_name).size
+        assert w < h
+        os.rename(old_name, new_name)
+        cnt += 1
+    os.rename(dir, os.path.join("./html/images", name))
+
+    info[name] = { "title": dir, "pages": cnt - 1}
+    return info
 
 if __name__ == "__main__":
-    with open("./config.toml", 'rb') as config:
-        info = tomli.load(config)
-    assert info is not None
-    w, h = getImgWH()
-    chapter = HTMLMaker(info, w, h).generate()
-    XMLMaker(info, chapter, w, h).generate()
-    os.system("kindlegen -c2 -dont_append_source -verbose content.opf")
+    assert os.path.exists("./meta.toml")
+    with open("./meta.toml", 'rb') as f:
+        meta = tomli.load(f)
+    format_files()
+    # w, h = getImgWH()
+    # chapter = HTMLMaker(info, w, h).generate()
+    # XMLMaker(info, chapter, w, h).generate()
+    # os.system("kindlegen -c2 -dont_append_source -verbose content.opf")
