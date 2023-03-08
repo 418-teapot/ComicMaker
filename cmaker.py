@@ -124,98 +124,6 @@ class XMLMaker(object):
         with open("./content.opf", 'w', encoding="utf-8") as f:
             self.doc.writexml(f, newl="\n", addindent="\t", encoding="utf-8")
 
-# generate pages html and toc.ncx
-class HTMLMaker(object):
-    def __init__(self, info: dict, width: int, height: int):
-        self.title = info["title"]
-        self.width = width
-        self.height = height
-        self.chapter: dict[str, str] = {}
-
-    def generateMeta(self, doc, head, content: str, name: str):
-        assert head is not None
-        meta = doc.createElement("meta")
-        meta.setAttribute("content", content)
-        meta.setAttribute("name", name)
-        head.appendChild(meta)
-
-    def generateNavPoint(self, doc, nav_map, cnt: int, text: str, src: str):
-        nav_point = doc.createElement("navPoint")
-        nav_point.setAttribute("playOrder", str(cnt))
-        nav_point.setAttribute("id", "toc-{}".format(cnt))
-
-        nav_label = doc.createElement("navLabel")
-        text_node = doc.createElement("text")
-        text_node.appendChild(doc.createTextNode(text))
-        nav_label.appendChild(text_node)
-        nav_point.appendChild(nav_label)
-
-        content = doc.createElement("content")
-        content.setAttribute("src", src)
-        nav_point.appendChild(content)
-
-        nav_map.appendChild(nav_point)
-
-    def generateNavPoints(self, doc, nav_map):
-        cnt: int = 1
-        bias = 0
-        if "preface" in self.chapter.keys():
-            self.generateNavPoint(doc, nav_map, cnt, "前言", "html/preface-001.html")
-            bias = 1
-
-        while str(cnt) in self.chapter.keys():
-            self.generateNavPoint(doc, nav_map, cnt + bias, self.chapter[str(cnt)], "html/{}-001.html".format(cnt))
-            cnt += 1
-
-        if "postscript" in self.chapter.keys():
-            self.generateNavPoint(doc, nav_map, cnt + bias, "后记", "html/postscript-001.html")
-
-    def generateTOC(self):
-        doc = Document()
-
-        ncx = doc.createElement("ncx")
-        ncx.setAttribute("version", "2005-1")
-        ncx.setAttribute("xmlns", "http://www.daisy.org/z3986/2005/ncx/")
-        ncx.setAttribute("xml:lang", "en-US")
-
-        head = doc.createElement("head")
-        self.generateMeta(doc, head, "", "dtb:uid")
-        self.generateMeta(doc, head, "", "dtb:depth")
-        self.generateMeta(doc, head, "0", "dtb:totalPageCount")
-        self.generateMeta(doc, head, "0", "dtb:maxPageNumber")
-        self.generateMeta(doc, head, "true", "generated")
-        ncx.appendChild(head)
-
-        doc_title = doc.createElement("docTitle")
-        title_text = doc.createElement("text")
-        title_text.appendChild(doc.createTextNode(self.title))
-        doc_title.appendChild(title_text)
-        ncx.appendChild(doc_title)
-
-        nav_map = doc.createElement("navMap")
-        self.generateNavPoints(doc, nav_map)
-        ncx.appendChild(nav_map)
-
-        doc.appendChild(ncx)
-
-        with open("./toc.ncx", "w", encoding="utf-8") as f:
-            f.write(f"<?xml version='1.0' encoding='UTF-8'?>\n")
-            f.write(f"<!DOCTYPE ncx PUBLIC '-//NISO//DTD ncx 2005-1//EN' 'http://www.daisy.org/z3986/2005/ncx-2005-1.dtd'>\n")
-            for node in doc.childNodes:
-                node.writexml(f, indent="", addindent="\t", newl="\n")
-
-    def generate(self) -> dict:
-        self.generatePages()
-        self.generateTOC()
-        return self.chapter
-
-def getCoverName() -> str:
-    assert os.path.exists("./cover.jpg") or os.path.exists("./cover.png")
-    if os.path.exists("./cover.jpg"):
-        return "cover.jpg"
-    else:
-        return "cover.png"
-
 def get_cover_name() -> str:
     pattern = re.compile(r'cover\w*\.(jpg|png)')
     for item in os.listdir("./"):
@@ -327,13 +235,82 @@ def generate_htmls():
     for info in infos:
         generate_html(info)
 
+def generate_toc():
+    assert os.path.exists("./info.toml")
+    with open("./info.toml", 'rb') as f:
+        infos = tomli.load(f)["info"]
+    assert os.path.exists("./meta.toml")
+    with open("./meta.toml", 'rb') as f:
+        meta = tomli.load(f)
+
+    doc = Document()
+    ncx = generate_element(doc, doc, "ncx",
+                           attr = {
+                                "version": "2005-1",
+                                "xmlns": "http://www.daisy.org/z3986/2005/ncx/",
+                                "xml:lang": "en_US"
+                           })
+    head = generate_element(doc, ncx, "head")
+    generate_element(doc, head, "meta", attr = { "content": "", "name": "dtb:uid" })
+    generate_element(doc, head, "meta", attr = { "content": "", "name": "dtb:depth" })
+    generate_element(doc, head, "meta", attr = { "content": "0", "name": "dtb:totalPageCount" })
+    generate_element(doc, head, "meta", attr = { "content": "0", "name": "dtb:maxPageNumber" })
+    generate_element(doc, head, "meta", attr = { "content": "true", "name": "generated" })
+    doc_title = generate_element(doc, ncx, "docTitle")
+    generate_element(doc, doc_title, "text", text = "{}".format(meta["title"]))
+    nav_map = generate_element(doc, ncx, "navMap")
+
+    info_dict = {}
+    for info in infos:
+        for k, v in info.items():
+            info_dict[k] = v
+
+    cnt: int = 1
+    bias: int = 0
+    if "preface" in info_dict.keys():
+        nav_point = generate_element(doc, nav_map, "navPoint",
+                                     attr = {
+                                         "playOrder": "1",
+                                         "id": "toc-1"
+                                     })
+        nav_label = generate_element(doc, nav_point, "navLabel")
+        generate_element(doc, nav_label, "text", text = "{}".format(info_dict["preface"]["title"]))
+        generate_element(doc, nav_point, "content", attr = { "src": "html/{}-001.html".format("preface") })
+        bias = 1
+
+    while str(cnt) in info_dict.keys():
+        nav_point = generate_element(doc, nav_map, "navPoint",
+                                     attr = {
+                                         "playOrder": "{}".format(cnt + bias),
+                                         "id": "toc-{}".format(cnt + bias)
+                                     })
+        nav_label = generate_element(doc, nav_point, "navLabel")
+        generate_element(doc, nav_label, "text", text = "{}".format(info_dict[str(cnt)]["title"]))
+        generate_element(doc, nav_point, "content", attr = { "src": "html/{}-001.html".format(str(cnt)) })
+        cnt += 1
+
+    if "postscript" in info_dict.keys():
+        nav_point = generate_element(doc, nav_map, "navPoint",
+                                     attr = {
+                                         "playOrder": "{}".format(cnt),
+                                         "id": "toc-{}".format(cnt)
+                                     })
+        nav_label = generate_element(doc, nav_point, "navLabel")
+        generate_element(doc, nav_label, "text", text = "{}".format(info_dict["postscript"]["title"]))
+        generate_element(doc, nav_point, "content", attr = { "src": "html/{}-001.html".format("postscript") })
+
+    with open("./toc.ncx", "w", encoding="utf-8") as f:
+        f.write(f"<?xml version='1.0' encoding='UTF-8'?>\n")
+        f.write(f"<!DOCTYPE ncx PUBLIC '-//NISO//DTD ncx 2005-1//EN' 'http://www.daisy.org/z3986/2005/ncx-2005-1.dtd'>\n")
+        for node in doc.childNodes:
+            node.writexml(f, indent="", addindent="\t", newl="\n")
+
 if __name__ == "__main__":
     assert os.path.exists("./meta.toml")
     with open("./meta.toml", 'rb') as f:
         meta = tomli.load(f)
     format_files()
     generate_htmls()
-    # w, h = getImgWH()
-    # chapter = HTMLMaker(info, w, h).generate()
+    generate_toc()
     # XMLMaker(info, chapter, w, h).generate()
     # os.system("kindlegen -c2 -dont_append_source -verbose content.opf")
