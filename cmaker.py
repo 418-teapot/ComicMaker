@@ -5,124 +5,9 @@ import uuid
 import tomli
 import tomli_w
 import re
-from glob import glob
-from functools import wraps
 from PIL import Image
 from xml.dom.minidom import Document
 
-# generate content.opf
-class XMLMaker(object):
-    def __init__(self, info: dict[str, str], chapter: dict[str, str], width: int, height: int):
-        self.title = info["title"]
-        self.language = info["language"]
-        self.author = info["author"]
-        match info["publisher"]:
-            case "null":
-                self.publisher = None
-            case _:
-                self.publisher = info["publisher"]
-        self.uuid = str(uuid.uuid4())
-        self.chapter = chapter
-        self.width = width
-        self.height = height
-        self.metadata = None
-
-    def generateMeta(self, content: str, name: str) -> None:
-        meta = self.doc.createElement("meta")
-        meta.setAttribute("content", content)
-        meta.setAttribute("name", name)
-        assert self.metadata is not None
-        self.metadata.appendChild(meta)
-
-    def generateDC(self, name: str, content) -> None:
-        attr = self.doc.createElement("dc:{}".format(name))
-        if content is not None:
-            attr.appendChild(self.doc.createTextNode(content))
-        assert self.metadata is not None
-        self.metadata.appendChild(attr)
-
-    def generateMetadata(self):
-        assert self.metadata is not None
-        self.metadata.setAttribute("xmlns:opf", "http://www.idpf.org/2007/opf")
-        self.metadata.setAttribute("xmlns:dc", "http://purl.org/dc/elements/1.1/")
-
-        self.generateMeta("comic", "book-type")
-        self.generateMeta("true", "zero-gutter")
-        self.generateMeta("true", "zero-margin")
-        self.generateMeta("true", "fixed-layout")
-
-        self.generateDC("title", self.title)
-        self.generateDC("language", self.language)
-        self.generateDC("creator", self.author)
-        self.generateDC("publisher", self.publisher)
-
-        self.generateMeta("portrait", "orientation-lock")
-        self.generateMeta("horizontal-rl", "primary-writting-mode")
-        # self.generateMeta("{}x{}".format(self.width, self.height), "original-resolution")
-        self.generateMeta("false", "region-mag")
-        self.generateMeta("cover-image", "cover")
-
-    def generateItem(self, href: str, id: str, media_type: str):
-        item = self.doc.createElement("item")
-        item.setAttribute("href", href)
-        item.setAttribute("id", id)
-        item.setAttribute("media_type", media_type)
-        self.manifest.appendChild(item)
-
-    def generateItemRef(self, idref: str):
-        itemref = self.doc.createElement("itemref")
-        itemref.setAttribute("idref", idref)
-        itemref.setAttribute("linear", "yes")
-        self.spine.appendChild(itemref)
-    
-    def generateManifestAndSpine(self):
-        assert self.manifest is not None
-        self.generateItem("toc.ncx", "ncx", "application/x-dtbncx+xml")
-        self.generateItem(getCoverName(), "cover-image", "image/{}".format(getCoverName()[-3:]))
-        assert self.spine is not None
-        self.spine.setAttribute("toc", "ncx")
-        if "preface" in self.chapter.keys():
-            prefaces = glob("html/preface*.html")
-            prefaces.sort(key=lambda x:int(x.split('-')[1].split('.')[0]))
-            for preface in prefaces:
-                self.generateItem(preface, "item-{}".format(preface[5:-5]), "application/xhtml+xmlapplication/xhtml+xml")
-                self.generateItemRef("item-{}".format(preface[5:-5]))
-        cnt: int = 1
-        while str(cnt) in self.chapter.keys():
-            chapter_cnt = glob("html/{}-*.html".format(str(cnt)))
-            chapter_cnt.sort(key=lambda x:int(x.split('-')[1].split('.')[0]))
-            for page in chapter_cnt:
-                self.generateItem(page, "item-{}".format(page[5:-5]), "application/xhtml+xml")
-                self.generateItemRef("item-{}".format(page[5:-5]))
-            cnt += 1
-        if "postscript" in self.chapter.keys():
-            postscripts = glob("html/postscript*.html")
-            postscripts.sort(key=lambda x:int(x.split('-')[1].split('.')[0]))
-            for postscript in postscripts:
-                self.generateItem(postscript, "item-{}".format(postscript[5:-5]), "application/xhtml+xmlapplication/xhtml+xml")
-                self.generateItemRef("item-{}".format(postscript[5:-5]))
-
-    def generate(self):
-        self.doc = Document()
-
-        self.package = self.doc.createElement("package")
-        self.package.setAttribute("version", "2.0")
-        self.package.setAttribute("xmlns", "http://www.idpf.org/2007/opf")
-        self.package.setAttribute("unique-identifier", "{" + self.uuid + "}")
-
-        self.metadata = self.doc.createElement("metadata")
-        self.generateMetadata()
-        self.package.appendChild(self.metadata)
-
-        self.manifest = self.doc.createElement("manifest")
-        self.spine = self.doc.createElement("spine")
-        self.generateManifestAndSpine()
-        self.package.appendChild(self.manifest)
-        self.package.appendChild(self.spine)
-
-        self.doc.appendChild(self.package)
-        with open("./content.opf", 'w', encoding="utf-8") as f:
-            self.doc.writexml(f, newl="\n", addindent="\t", encoding="utf-8")
 
 def get_cover_name() -> str:
     pattern = re.compile(r'cover\w*\.(jpg|png)')
@@ -217,11 +102,11 @@ def generate_htmls():
             doc = Document()
             html = generate_element(doc, doc, "html")
             head = generate_element(doc, html, "head")
-            meta = generate_element(doc, head, "meta", attr = { "charset": "UTF-8" })
-            title_node = generate_element(doc, head, "title", text = title)
+            generate_element(doc, head, "meta", attr = { "charset": "UTF-8" })
+            generate_element(doc, head, "title", text = key)
             body = generate_element(doc, html, "body")
             div = generate_element(doc, body, "div")
-            img = generate_element(doc, div, "img", attr = { "src" : "{}".format(get_img_name(key, i)) })
+            generate_element(doc, div, "img", attr = { "src" : "{}".format(get_img_name(key, i)) })
 
             html_file = os.path.join("./html", "{}-{:0>3d}.html".format(key, i))
             with open(html_file, 'w', encoding='utf-8') as f:
@@ -236,12 +121,10 @@ def generate_htmls():
         generate_html(info)
 
 def generate_toc():
-    assert os.path.exists("./info.toml")
-    with open("./info.toml", 'rb') as f:
-        infos = tomli.load(f)["info"]
-    assert os.path.exists("./meta.toml")
     with open("./meta.toml", 'rb') as f:
         meta = tomli.load(f)
+    with open("./info.toml", 'rb') as f:
+        infos = tomli.load(f)["info"]
 
     doc = Document()
     ncx = generate_element(doc, doc, "ncx",
@@ -299,11 +182,147 @@ def generate_toc():
         generate_element(doc, nav_label, "text", text = "{}".format(info_dict["postscript"]["title"]))
         generate_element(doc, nav_point, "content", attr = { "src": "html/{}-001.html".format("postscript") })
 
-    with open("./toc.ncx", "w", encoding="utf-8") as f:
+    with open("./toc.ncx", 'w', encoding="utf-8") as f:
         f.write(f"<?xml version='1.0' encoding='UTF-8'?>\n")
         f.write(f"<!DOCTYPE ncx PUBLIC '-//NISO//DTD ncx 2005-1//EN' 'http://www.daisy.org/z3986/2005/ncx-2005-1.dtd'>\n")
         for node in doc.childNodes:
             node.writexml(f, indent="", addindent="\t", newl="\n")
+
+def generate_content():
+    with open("./meta.toml", 'rb') as f:
+        meta = tomli.load(f)
+    with open("./info.toml", 'rb') as f:
+        infos = tomli.load(f)["info"]
+
+    doc = Document()
+    package = generate_element(doc, doc, "package",
+                               attr = {
+                                    "version": "2.0",
+                                    "xmlns": "http://www.idpf.org/2007/opf",
+                                    "unique-identifier": str(uuid.uuid4())
+                               })
+    metadata = generate_element(doc, package, "metadata",
+                                attr = {
+                                    "xmlns:opf": "http://www.idpf.org/2007/opf",
+                                    "xmlns:dc": "http://purl.org/dc/elements/1.1/"
+                                })
+    generate_element(doc, metadata, "meta",
+                     attr = {
+                         "content": "comic",
+                         "name": "book-type"
+                     })
+    generate_element(doc, metadata, "meta",
+                     attr = {
+                         "content": "true",
+                         "name": "zero-gutter"
+                     })
+    generate_element(doc, metadata, "meta",
+                     attr = {
+                         "content": "true",
+                         "name": "zero-margin"
+                     })
+    generate_element(doc, metadata, "meta",
+                     attr = {
+                         "content": "true",
+                         "name": "fixed-layout"
+                     })
+
+    generate_element(doc, metadata, "dc:title", text = "{}".format(meta["title"]))
+    generate_element(doc, metadata, "dc:language", text = "{}".format(meta["language"]))
+    generate_element(doc, metadata, "dc:creator", text = "{}".format(meta["author"]))
+    if "publisher" in meta.keys():
+        generate_element(doc, metadata, "dc:publisher", text = "{}".format(meta["publisher"]))
+    else:
+        generate_element(doc, metadata, "dc:publisher")
+
+    generate_element(doc, metadata, "meta",
+                     attr = {
+                         "content": "portrait",
+                         "name": "orientation-lock"
+                     })
+    generate_element(doc, metadata, "meta",
+                     attr = {
+                         "content": "horizontal-rl",
+                         "name": "primary-writting-mode"
+                     })
+    generate_element(doc, metadata, "meta",
+                     attr = {
+                         "content": "false",
+                         "name": "region-mag"
+                     })
+    generate_element(doc, metadata, "meta",
+                     attr = {
+                         "content": "cover-image",
+                         "name": "cover"
+                     })
+
+    manifest = generate_element(doc, package, "manifest")
+    spine = generate_element(doc, package, "spine", attr = { "toc": "ncx" })
+
+    generate_element(doc, manifest, "item",
+                     attr = {
+                         "href": "toc.ncx",
+                         "id": "ncx",
+                         "media_type": "application/x-dtbncx+xml"
+                     })
+    generate_element(doc, manifest, "item",
+                     attr = {
+                         "href": "{}".format(get_cover_name()),
+                         "id": "cover-image",
+                         "media_type": "image/{}".format(get_cover_name()[-3:])
+                     })
+
+    info_dict = {}
+    for info in infos:
+        for k, v in info.items():
+            info_dict[k] = v
+
+    if "preface" in info_dict.keys():
+        for i in range(1, info_dict["preface"]["pages"] + 1):
+            generate_element(doc, manifest, "item",
+                             attr = {
+                                 "href": "html/{}-{:0>3d}.html".format("preface", i),
+                                 "id": "item-{}-{:0>3d}".format("preface", i),
+                                 "media_type": "application/xhtml+xml"
+                             })
+            generate_element(doc, spine, "itemref",
+                             attr = {
+                                 "idref": "item-{}-{:0>3d}".format("preface", i),
+                                 "linear": "yes"
+                             })
+
+    cnt: int = 1
+    while str(cnt) in info_dict.keys():
+        for i in range(1, info_dict[str(cnt)]["pages"] + 1):
+            generate_element(doc, manifest, "item",
+                             attr = {
+                                 "href": "html/{}-{:0>3d}.html".format(cnt, i),
+                                 "id": "item-{}-{:0>3d}".format(cnt, i),
+                                 "media_type": "application/xhtml+xml"
+                             })
+            generate_element(doc, spine, "itemref",
+                             attr = {
+                                 "idref": "item-{}-{:0>3d}".format(cnt, i),
+                                 "linear": "yes"
+                             })
+        cnt += 1
+
+    if "postscript" in info_dict.keys():
+        for i in range(1, info_dict["postscript"]["pages"] + 1):
+            generate_element(doc, manifest, "item",
+                             attr = {
+                                 "href": "html/{}-{:0>3d}.html".format("postscript", i),
+                                 "id": "item-{}-{:0>3d}".format("postscript", i),
+                                 "media_type": "application/xhtml+xml"
+                             })
+            generate_element(doc, spine, "itemref",
+                             attr = {
+                                 "idref": "item-{}-{:0>3d}".format("postscript", i),
+                                 "linear": "yes"
+                             })
+
+    with open("./content.opf", 'w', encoding='utf-8') as f:
+        doc.writexml(f, newl="\n", addindent="\t", encoding="utf-8")
 
 if __name__ == "__main__":
     assert os.path.exists("./meta.toml")
@@ -312,5 +331,5 @@ if __name__ == "__main__":
     format_files()
     generate_htmls()
     generate_toc()
-    # XMLMaker(info, chapter, w, h).generate()
-    # os.system("kindlegen -c2 -dont_append_source -verbose content.opf")
+    generate_content()
+    os.system("kindlegen -c2 -dont_append_source -verbose content.opf")
