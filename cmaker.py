@@ -132,85 +132,6 @@ class HTMLMaker(object):
         self.height = height
         self.chapter: dict[str, str] = {}
 
-    def rename(self, dir: str) -> None :
-        cnt: int = 1
-        dirs = os.listdir(dir)
-        dirs.sort(key=lambda x:int(x.split('.')[0]))
-        for img in dirs:
-            assert img.endswith("jpg") or img.endswith("png")
-            old_name: str = os.path.join(dir, img)
-
-            # w, h = Image.open(old_name).size
-            # assert w == self.width and h == self.height
-
-            new_img: str = "{:0>3d}.{}".format(cnt, img[-3:])
-            new_name: str = os.path.join(dir, new_img)
-            os.rename(old_name, new_name)
-
-            cnt += 1
-        assert os.path.exists("./html/images")
-        os.rename(dir, os.path.join("./html/images", dir))
-
-    def generateChapter(self):
-        assert os.path.exists("./html/images")
-        for dir in os.listdir("./html/images"):
-            if dir == "前言":
-                self.chapter["preface"] = "前言"
-                os.rename("./html/images/前言", "./html/images/preface")
-            elif dir == "后记":
-                self.chapter["postscript"] = "后记"
-                os.rename("./html/images/后记", "./html/images/postscript")
-            else:
-                chapter_num = re.match("第\d+话", dir).group()
-                assert chapter_num is not None
-                num = re.search("\d+", chapter_num).group()
-                assert num is not None
-                # chapter_name = re.split("第\d+话", dir)[1]
-                # assert chapter_name is not None
-                self.chapter[str(int(num))] = dir
-                os.rename(os.path.join("./html/images", dir), os.path.join("./html/images", num))
-
-    def generateHTML(self, title: str, src: str):
-        doc = Document()
-        html = doc.createElement("html");
-
-        head = doc.createElement("head")
-        meta_node = doc.createElement("meta")
-        meta_node.setAttribute("charset", "UTF-8")
-        head .appendChild(meta_node)
-        title_node = doc.createElement("title")
-        title_node.appendChild(doc.createTextNode(title))
-        head.appendChild(title_node)
-        html.appendChild(head)
-
-        body = doc.createElement("body")
-        div = doc.createElement("div")
-        img = doc.createElement("img")
-        # img.setAttribute("style", "width:{}px;height:{}px;margin-left:0px;margin-top:0px;margin-right:0px;margin-bottom:0px;".format(self.width, self.height))
-        title_path = os.path.join("images", title)
-        img_path = os.path.join(title_path, src)
-        img.setAttribute("src", img_path)
-        div.appendChild(img)
-        body.appendChild(div)
-        html.appendChild(body)
-
-        doc.appendChild(html)
-
-        html_file = "{}-{}.html".format(title, src[:-4])
-        with open(os.path.join("./html", html_file), 'w', encoding='utf-8') as f:
-            f.write(f'<!DOCTYPE html>\n')
-            for node in doc.childNodes:
-                node.writexml(f, indent="", addindent="\t", newl="\n")
-
-
-    def generatePages(self):
-        assert os.path.exists("./html/images")
-        for chapter in os.listdir("./html/images"):
-            chapter_path = os.path.join("./html/images", chapter)
-            if os.path.isdir(chapter_path):
-                for page in os.listdir(chapter_path):
-                    self.generateHTML(chapter, page)
-
     def generateMeta(self, doc, head, content: str, name: str):
         assert head is not None
         meta = doc.createElement("meta")
@@ -283,16 +204,7 @@ class HTMLMaker(object):
             for node in doc.childNodes:
                 node.writexml(f, indent="", addindent="\t", newl="\n")
 
-    def tidy(self):
-        assert not os.path.exists("./html/images")
-        os.makedirs("./html/images")
-        for item in os.listdir("./"):
-            if os.path.isdir(item) and item != ".git" and item != "html" and item != "backup":
-                self.rename(item)
-
     def generate(self) -> dict:
-        self.tidy()
-        self.generateChapter()
         self.generatePages()
         self.generateTOC()
         return self.chapter
@@ -304,21 +216,13 @@ def getCoverName() -> str:
     else:
         return "cover.png"
 
-class generate(object):
-    def __init__(self, doc):
-        self.doc = doc
-
-    def __call__(self, func):
-        @wraps
-        def decorator(*args, **kwargs):
-            return func(*args, **kwargs)
-        return decorator
-
 def get_cover_name() -> str:
     pattern = re.compile(r'cover\w*\.(jpg|png)')
     for item in os.listdir("./"):
         if pattern.search(item) is not None:
             return item
+    assert False
+    return ""
 
 def format_files() -> None:
     if not os.path.exists("./html/images"):
@@ -367,11 +271,68 @@ def format_chapter(dir: str) -> dict:
     info[name] = { "title": dir, "pages": cnt - 1}
     return info
 
+def generate_element(doc, father, name, attr={}, text=None):
+    sub_elem = doc.createElement(name)
+    for attr_name, attr_content in attr.items():
+        sub_elem.setAttribute(attr_name, attr_content)
+    if text is not None:
+        sub_elem.appendChild(doc.createTextNode(text))
+    father.appendChild(sub_elem)
+    return sub_elem
+
+def generate_htmls():
+    def get_img_name(key: str, i: int) -> str:
+        path = os.path.join("./html/images", key)
+        for img in os.listdir(path):
+            pattern_str = "{:0>3d}\\.(jpg|png)".format(i)
+            pattern = re.compile(pattern_str)
+            name = pattern.match(img)
+            if name is None:
+                continue
+            assert name is not None
+            return "images/{}/{}".format(key, name.group())
+        assert False
+        return ""
+
+    def generate_html(info: dict[str, dict]) -> None:
+        key: str = list(info.keys())[0]
+        title: str = info[key]["title"]
+        num: int = info[key]["pages"]
+
+        for file in os.listdir("./html"):
+            pattern_str = "{}-\\d+\\.html".format(key)
+            pattern = re.compile(pattern_str)
+            if pattern.match(file) is not None:
+                return
+        
+        for i in range(1, num + 1):
+            doc = Document()
+            html = generate_element(doc, doc, "html")
+            head = generate_element(doc, html, "head")
+            meta = generate_element(doc, head, "meta", attr = { "charset": "UTF-8" })
+            title_node = generate_element(doc, head, "title", text = title)
+            body = generate_element(doc, html, "body")
+            div = generate_element(doc, body, "div")
+            img = generate_element(doc, div, "img", attr = { "src" : "{}".format(get_img_name(key, i)) })
+
+            html_file = os.path.join("./html", "{}-{:0>3d}.html".format(key, i))
+            with open(html_file, 'w', encoding='utf-8') as f:
+                f.write(f'<!DOCTYPE html>\n')
+                for node in doc.childNodes:
+                    node.writexml(f, indent="", addindent="\t", newl="\n")
+
+    assert os.path.exists("./info.toml")
+    with open("./info.toml", 'rb') as f:
+        infos = tomli.load(f)["info"]
+    for info in infos:
+        generate_html(info)
+
 if __name__ == "__main__":
     assert os.path.exists("./meta.toml")
     with open("./meta.toml", 'rb') as f:
         meta = tomli.load(f)
     format_files()
+    generate_htmls()
     # w, h = getImgWH()
     # chapter = HTMLMaker(info, w, h).generate()
     # XMLMaker(info, chapter, w, h).generate()
