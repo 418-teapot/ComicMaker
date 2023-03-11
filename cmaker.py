@@ -228,7 +228,11 @@ def generate_content():
                      })
 
     generate_element(doc, metadata, "dc:title", text = "{}".format(meta["title"]))
-    generate_element(doc, metadata, "dc:language", text = "{}".format(meta["language"]))
+    if "language" in meta.keys():
+        language = meta["language"]
+    else:
+        language = "zh"
+    generate_element(doc, metadata, "dc:language", text = "{}".format(language))
     generate_element(doc, metadata, "dc:creator", text = "{}".format(meta["author"]))
     if "publisher" in meta.keys():
         generate_element(doc, metadata, "dc:publisher", text = "{}".format(meta["publisher"]))
