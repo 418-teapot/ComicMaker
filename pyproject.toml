@@ -1,0 +1,29 @@
+[build-system]
+requires = [
+    "setuptools",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ComicMaker"
+version = "0.1.0"
+description = "Comic maker."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "EbookLib >= 0.19",
+    "pillow >= 11.3",
+]
+
+[tool.isort]
+atomic = true
+combine_as_imports = true
+include_trailing_comma = true
+line_length = 79
+multi_line_output = 3
+py_version = 312
+skip_gitignore = true
+
+[tool.ruff]
+line-length = 79
+target-version = "py313"

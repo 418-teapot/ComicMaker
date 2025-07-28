@@ -1,4 +1,5 @@
-config.toml
-content.opf
-cover.jpg
 .vscode/
+.venv/
+*.egg-info
+__pycache__
+uv.lock
