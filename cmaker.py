@@ -1,3 +1,6 @@
+#! /usr/bin/env -S uv run --script
+# -*- coding: utf-8 -*-
+
 import argparse
 import os
 import re
