@@ -11,7 +11,6 @@ from ebooklib import epub
 from PIL import Image
 
 META_FILE: str = "meta.toml"
-HTML_SUBPATH: str = "html"
 IMAGE_SUBPATH: str = "images"
 PRE_CHAPTER: str = "pre"
 POST_CHAPTER: str = "post"
@@ -22,6 +21,9 @@ CHAPTER_MAP: dict[str, str] = {
 TITLE_MAP: dict[str, str] = {
     PRE_CHAPTER: "前言",
     POST_CHAPTER: "后记",
+}
+USELESS_FILES: set[str] = {
+    ".DS_Store",
 }
 
 
@@ -37,13 +39,12 @@ def get_meta_info(path: str) -> dict[str, Any]:
 
 
 def format_images(path: str) -> None:
-    images_path: str = os.path.join(path, IMAGE_SUBPATH)
-    if os.path.exists(images_path):
-        return
-
     for dir in os.listdir(path):
         dir_path: str = os.path.join(path, dir)
         if not os.path.isdir(dir_path):
+            continue
+
+        if dir == IMAGE_SUBPATH:
             continue
 
         if dir in CHAPTER_MAP:
@@ -57,17 +58,21 @@ def format_images(path: str) -> None:
 
         new_path: str = os.path.join(path, IMAGE_SUBPATH, name)
         os.makedirs(new_path, exist_ok=True)
-        try:
-            os.rename(dir_path, new_path)
-        except Exception as e:
-            print(f"Error renaming {dir_path} to {new_path}: {e}")
-            continue
 
-        images: list[str] = os.listdir(new_path)
+        images: list[str] = []
+        for item in os.listdir(dir_path):
+            if item in USELESS_FILES:
+                os.remove(os.path.join(dir_path, item))
+            elif os.path.isfile(os.path.join(dir_path, item)):
+                images.append(item)
+
+        if any(not re.match(r"(\d+)\.(\w+)", x) for x in images):
+            print(f"Skipping {dir_path}, not a valid image directory.")
+            continue
         images.sort(key=lambda x: int(re.match(r"(\d+)\.(\w+)", x).group(1)))
 
         for i, image in enumerate(images, start=1):
-            image_path: str = os.path.join(new_path, image)
+            image_path: str = os.path.join(dir_path, image)
             _, ext = os.path.splitext(image)
             new_name: str = f"{i:03d}{ext}"
             try:
@@ -81,6 +86,9 @@ def format_images(path: str) -> None:
                 img = img.rotate(270, expand=True)
                 img.save(os.path.join(new_path, new_name))
             img.close()
+
+        if os.listdir(dir_path).__len__() == 0:
+            os.rmdir(dir_path)
 
 
 def get_chapters(path: str) -> list[str]:
