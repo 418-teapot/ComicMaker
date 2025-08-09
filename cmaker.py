@@ -66,10 +66,10 @@ def format_images(path: str) -> None:
             elif os.path.isfile(os.path.join(dir_path, item)):
                 images.append(item)
 
-        if any(not re.match(r"(\d+)\.(\w+)", x) for x in images):
+        if any(not re.search(r"(\d+)\.(\w+)", x) for x in images):
             print(f"Skipping {dir_path}, not a valid image directory.")
             continue
-        images.sort(key=lambda x: int(re.match(r"(\d+)\.(\w+)", x).group(1)))
+        images.sort(key=lambda x: int(re.search(r"(\d+)\.(\w+)", x).group(1)))
 
         for i, image in enumerate(images, start=1):
             image_path: str = os.path.join(dir_path, image)
@@ -102,7 +102,7 @@ def get_chapters(path: str) -> list[str]:
 
     main: list[str] = []
     for chapter in os.listdir(os.path.join(path, IMAGE_SUBPATH)):
-        if re.match(r"^\d+(\.\d+)?$", chapter):
+        if re.match(r"\d+(\.\d+)?$", chapter):
             main.append(chapter)
     main.sort(key=lambda x: float(x))
     chapters.extend(main)
