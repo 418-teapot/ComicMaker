@@ -13,7 +13,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "EbookLib >= 0.19",
-    "setuptools_scm",
+    "pillow >= 11.3.0",
 ]
 
 [tool.isort]

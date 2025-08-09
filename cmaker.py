@@ -8,6 +8,7 @@ import tomllib
 from typing import Any
 
 from ebooklib import epub
+from PIL import Image
 
 META_FILE: str = "meta.toml"
 HTML_SUBPATH: str = "html"
@@ -48,7 +49,7 @@ def format_images(path: str) -> None:
         if dir in CHAPTER_MAP:
             name: str = CHAPTER_MAP[dir]
         else:
-            m = re.match(r"第(\d+)话", dir)
+            m = re.match(r"第(\d+(\.\d+)?)话", dir)
             if not m:
                 print(f"Skipping {dir_path}, not a valid chapter directory.")
                 continue
@@ -65,7 +66,7 @@ def format_images(path: str) -> None:
         images: list[str] = os.listdir(new_path)
         images.sort(key=lambda x: int(re.match(r"(\d+)\.(\w+)", x).group(1)))
 
-        for i, image in enumerate(images):
+        for i, image in enumerate(images, start=1):
             image_path: str = os.path.join(new_path, image)
             _, ext = os.path.splitext(image)
             new_name: str = f"{i:03d}{ext}"
@@ -74,6 +75,12 @@ def format_images(path: str) -> None:
             except Exception as e:
                 print(f"Error renaming {image_path} to {new_name}: {e}")
                 continue
+            img = Image.open(os.path.join(new_path, new_name))
+            w, h = img.size
+            if w > h:
+                img = img.rotate(270, expand=True)
+                img.save(os.path.join(new_path, new_name))
+            img.close()
 
 
 def get_chapters(path: str) -> list[str]:
@@ -85,9 +92,12 @@ def get_chapters(path: str) -> list[str]:
     if os.path.exists(os.path.join(path, IMAGE_SUBPATH, PRE_CHAPTER)):
         chapters.append(PRE_CHAPTER)
 
+    main: list[str] = []
     for chapter in os.listdir(os.path.join(path, IMAGE_SUBPATH)):
-        if re.match(r"(\d+)", chapter):
-            chapters.append(chapter)
+        if re.match(r"^\d+(\.\d+)?$", chapter):
+            main.append(chapter)
+    main.sort(key=lambda x: float(x))
+    chapters.extend(main)
 
     if os.path.exists(os.path.join(path, IMAGE_SUBPATH, POST_CHAPTER)):
         chapters.append(POST_CHAPTER)
